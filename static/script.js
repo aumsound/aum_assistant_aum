@@ -53,13 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ws.onopen = () => {
                 console.log("WebSocket connection established.");
                 
-                // Try different MIME types for better iPhone compatibility
-                let mimeType = 'audio/webm';
-                if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                    if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                        mimeType = 'audio/mp4';
-                    } else if (MediaRecorder.isTypeSupported('audio/wav')) {
-                        mimeType = 'audio/wav';
+                // Use WAV format for Whisper compatibility
+                let mimeType = 'audio/wav';
+                if (!MediaRecorder.isTypeSupported('audio/wav')) {
+                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=pcm')) {
+                        mimeType = 'audio/webm;codecs=pcm';
+                    } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                        mimeType = 'audio/webm';
                     } else {
                         mimeType = ''; // Let browser choose
                     }
@@ -171,9 +171,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         const source = audioContext.createBufferSource();
+        
+        // Create gain node for LOUD volume (like speakerphone)
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 3.0; // 300% volume - LOUD AS FUCK
+        
         source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
         source.start();
+        
+        console.log('🔊 Playing audio at 300% volume');
     };
 
     const updateMessengerLinks = () => {

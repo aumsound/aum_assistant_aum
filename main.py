@@ -113,8 +113,8 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "status", "status": "processing"})
             
             # 1. Transcribe User's Audio  
-            # Use generic audio extension since format may vary (webm, mp4, wav)
-            transcript_path = "temp_transcript.audio"
+            # Save as WAV since Whisper supports it
+            transcript_path = "temp_transcript.wav"
             with open(transcript_path, "wb") as f:
                 f.write(data)
             print(f"💾 Saved audio file: {len(data)} bytes")
@@ -122,13 +122,23 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 with open(transcript_path, "rb") as audio_file:
                     print("🎤 Starting transcription...")
-                    transcript = client.audio.transcriptions.create(
-                        model=WHISPER_MODEL,
-                        file=audio_file,
-                    )
+                    try:
+                        # Try as WAV first
+                        transcript = client.audio.transcriptions.create(
+                            model=WHISPER_MODEL,
+                            file=("audio.wav", audio_file, "audio/wav"),
+                        )
+                    except Exception as wav_error:
+                        print(f"WAV failed, trying generic: {wav_error}")
+                        audio_file.seek(0)  # Reset file pointer
+                        # Fallback: let OpenAI detect format
+                        transcript = client.audio.transcriptions.create(
+                            model=WHISPER_MODEL,
+                            file=audio_file,
+                        )
                 print(f"✅ Transcription successful")
             except Exception as e:
-                print(f"❌ Transcription failed: {e}")
+                print(f"❌ Transcription failed completely: {e}")
                 # Try sending debug info to client
                 await websocket.send_json({
                     "type": "debug", 
