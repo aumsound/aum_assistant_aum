@@ -68,43 +68,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`Using MIME type: ${mimeType}`);
                 mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
                 
-                let isRecording = false;
                 let audioChunks = [];
+                let recordingTimeout;
 
                 mediaRecorder.addEventListener('dataavailable', event => {
+                    console.log('📼 Audio data available:', event.data.size, 'bytes');
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
                     }
                 });
                 
                 mediaRecorder.addEventListener('stop', () => {
+                    console.log('⏹️ Recording stopped, chunks:', audioChunks.length);
                     if (audioChunks.length > 0 && ws.readyState === WebSocket.OPEN) {
                         const audioBlob = new Blob(audioChunks, { type: mimeType });
+                        console.log('📤 Sending audio blob:', audioBlob.size, 'bytes');
                         ws.send(audioBlob);
                         audioChunks = [];
+                    } else {
+                        console.warn('⚠️ No audio to send or WebSocket closed');
                     }
+                    
+                    // Restart recording after a short delay
+                    setTimeout(startRecording, 500);
                 });
 
-                // Record in 3-second chunks for better iPhone compatibility
-                const recordChunk = () => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        if (!isRecording) {
-                            audioChunks = [];
+                mediaRecorder.addEventListener('error', (e) => {
+                    console.error('🚨 MediaRecorder error:', e);
+                });
+
+                const startRecording = () => {
+                    if (ws.readyState === WebSocket.OPEN && mediaRecorder.state === 'inactive') {
+                        console.log('▶️ Starting recording...');
+                        audioChunks = [];
+                        try {
                             mediaRecorder.start();
-                            isRecording = true;
-                            setTimeout(() => {
-                                if (isRecording && mediaRecorder.state === 'recording') {
+                            // Stop after 4 seconds to create chunks
+                            recordingTimeout = setTimeout(() => {
+                                if (mediaRecorder.state === 'recording') {
+                                    console.log('⏰ Stopping recording after 4 seconds');
                                     mediaRecorder.stop();
-                                    isRecording = false;
-                                    // Start next chunk after small delay
-                                    setTimeout(recordChunk, 100);
                                 }
-                            }, 3000);
+                            }, 4000);
+                        } catch (e) {
+                            console.error('🚨 Failed to start recording:', e);
                         }
                     }
                 };
                 
-                recordChunk();
+                // Start the recording loop
+                startRecording();
             };
 
             ws.onmessage = (event) => {
@@ -116,6 +129,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateMessengerLinks();
                 } else if (data.type === 'status') {
                     updateStatus(data.status);
+                } else if (data.type === 'debug') {
+                    console.error('🚨 Server debug:', data.message);
+                    // Show debug message to user temporarily
+                    const debugDiv = document.createElement('div');
+                    debugDiv.style.cssText = 'position:fixed;top:10px;left:10px;background:red;color:white;padding:10px;border-radius:5px;z-index:1000;max-width:300px;';
+                    debugDiv.textContent = data.message;
+                    document.body.appendChild(debugDiv);
+                    setTimeout(() => document.body.removeChild(debugDiv), 5000);
                 }
             };
 

@@ -105,7 +105,9 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             # This is a simplified turn-based implementation
             # It waits for a complete audio message from the user
+            print("🎧 Waiting for audio data...")
             data = await websocket.receive_bytes()
+            print(f"📡 Received {len(data)} bytes of audio data")
             
             # Indicate processing started
             await websocket.send_json({"type": "status", "status": "processing"})
@@ -115,16 +117,23 @@ async def websocket_endpoint(websocket: WebSocket):
             transcript_path = "temp_transcript.audio"
             with open(transcript_path, "wb") as f:
                 f.write(data)
+            print(f"💾 Saved audio file: {len(data)} bytes")
 
             try:
                 with open(transcript_path, "rb") as audio_file:
+                    print("🎤 Starting transcription...")
                     transcript = client.audio.transcriptions.create(
                         model=WHISPER_MODEL,
                         file=audio_file,
                     )
+                print(f"✅ Transcription successful")
             except Exception as e:
                 print(f"❌ Transcription failed: {e}")
-                # Skip this audio chunk and continue listening
+                # Try sending debug info to client
+                await websocket.send_json({
+                    "type": "debug", 
+                    "message": f"Transcription failed: {str(e)[:100]}"
+                })
                 await websocket.send_json({"type": "status", "status": "listening"})
                 continue
             user_text = transcript.text.strip()
