@@ -23,16 +23,23 @@ with open("prompt.txt", "r", encoding="utf-8") as f:
 
 # --- DATABASE SETUP ---
 async def init_db():
-    conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute('''
-        CREATE TABLE IF NOT EXISTS conversations (
-            id SERIAL PRIMARY KEY,
-            session_code VARCHAR(20) UNIQUE NOT NULL,
-            conversation_log JSONB,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    await conn.close()
+    if DATABASE_URL:
+        try:
+            conn = await asyncpg.connect(DATABASE_URL)
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id SERIAL PRIMARY KEY,
+                    session_code VARCHAR(20) UNIQUE NOT NULL,
+                    conversation_log JSONB,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            await conn.close()
+            print("✅ Database connected successfully")
+        except Exception as e:
+            print(f"❌ Database connection failed: {e}")
+    else:
+        print("⚠️  No DATABASE_URL found - running without database")
 
 # --- FASTAPI APP ---
 app = FastAPI()
@@ -46,20 +53,26 @@ def generate_session_code():
     return 'AUM-PASS-' + ''.join(random.choice(chars) for _ in range(4))
 
 async def save_conversation(session_code, conversation_history):
-    conn = await asyncpg.connect(DATABASE_URL)
-    # Check if a record with this session_code already exists
-    record = await conn.fetchrow('SELECT id FROM conversations WHERE session_code = $1', session_code)
-    if record:
-        await conn.execute(
-            'UPDATE conversations SET conversation_log = $1 WHERE session_code = $2',
-            json.dumps(conversation_history), session_code
-        )
+    if DATABASE_URL:
+        try:
+            conn = await asyncpg.connect(DATABASE_URL)
+            # Check if a record with this session_code already exists
+            record = await conn.fetchrow('SELECT id FROM conversations WHERE session_code = $1', session_code)
+            if record:
+                await conn.execute(
+                    'UPDATE conversations SET conversation_log = $1 WHERE session_code = $2',
+                    json.dumps(conversation_history), session_code
+                )
+            else:
+                await conn.execute(
+                    'INSERT INTO conversations (session_code, conversation_log) VALUES ($1, $2)',
+                    session_code, json.dumps(conversation_history)
+                )
+            await conn.close()
+        except Exception as e:
+            print(f"❌ Failed to save conversation: {e}")
     else:
-        await conn.execute(
-            'INSERT INTO conversations (session_code, conversation_log) VALUES ($1, $2)',
-            session_code, json.dumps(conversation_history)
-        )
-    await conn.close()
+        print(f"💬 Session {session_code}: Conversation not saved (no database)")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
