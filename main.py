@@ -16,7 +16,10 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 client = OpenAI(api_key=OPENAI_API_KEY)
-AI_VOICE = "sage" #alloy, echo, fable, onyx, nova, and shimmer
+AI_VOICE = "alloy"  # alloy, echo, fable, onyx, nova, shimmer
+CHAT_MODEL = "gpt-4.1-mini"  # Дешевая модель 2025
+TTS_MODEL = "tts-1"  # Дешевая TTS
+WHISPER_MODEL = "whisper-1"  # Дешевая STT
 
 with open("prompt.txt", "r", encoding="utf-8") as f:
     PROMPT_SYSTEM_MESSAGE = f.read()
@@ -85,14 +88,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # --- Initial Greeting from AI ---
     ai_response = client.chat.completions.create(
-        model="gpt-4-turbo",
+        model=CHAT_MODEL,
         messages=conversation_history + [{"role": "user", "content": "Hi"}]
     )
     initial_greeting_text = ai_response.choices[0].message.content
     conversation_history.append({"role": "assistant", "content": initial_greeting_text})
     
     response = client.audio.speech.create(
-        model="tts-1", voice=AI_VOICE, input=initial_greeting_text
+        model=TTS_MODEL, voice=AI_VOICE, input=initial_greeting_text
     )
     audio_base64 = base64.b64encode(response.content).decode('utf-8')
     await websocket.send_json({"type": "audio", "data": audio_base64})
@@ -107,23 +110,36 @@ async def websocket_endpoint(websocket: WebSocket):
             # Indicate processing started
             await websocket.send_json({"type": "status", "status": "processing"})
             
-            # 1. Transcribe User's Audio
-            transcript_path = "temp_transcript.webm"
+            # 1. Transcribe User's Audio  
+            # Use generic audio extension since format may vary (webm, mp4, wav)
+            transcript_path = "temp_transcript.audio"
             with open(transcript_path, "wb") as f:
                 f.write(data)
 
-            with open(transcript_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                )
-            user_text = transcript.text
+            try:
+                with open(transcript_path, "rb") as audio_file:
+                    transcript = client.audio.transcriptions.create(
+                        model=WHISPER_MODEL,
+                        file=audio_file,
+                    )
+            except Exception as e:
+                print(f"❌ Transcription failed: {e}")
+                # Skip this audio chunk and continue listening
+                await websocket.send_json({"type": "status", "status": "listening"})
+                continue
+            user_text = transcript.text.strip()
+            
+            # Skip empty or very short transcripts
+            if not user_text or len(user_text) < 3:
+                await websocket.send_json({"type": "status", "status": "listening"})
+                continue
+                
             conversation_history.append({"role": "user", "content": user_text})
             print(f"User said: {user_text}")
 
             # 2. Get AI Response
             ai_response = client.chat.completions.create(
-                model="gpt-4-turbo",
+                model=CHAT_MODEL,
                 messages=conversation_history
             )
             ai_text = ai_response.choices[0].message.content
@@ -133,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # 3. Convert AI Response to Speech
             await websocket.send_json({"type": "status", "status": "speaking"})
             response_audio = client.audio.speech.create(
-                model="tts-1", voice=AI_VOICE, input=ai_text
+                model=TTS_MODEL, voice=AI_VOICE, input=ai_text
             )
             audio_base64 = base64.b64encode(response_audio.content).decode('utf-8')
             

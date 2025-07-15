@@ -37,7 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const startConversation = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }
+            });
             
             // Set up WebSocket connection
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -45,22 +52,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
             ws.onopen = () => {
                 console.log("WebSocket connection established.");
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                
+                // Try different MIME types for better iPhone compatibility
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                    if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                        mimeType = 'audio/mp4';
+                    } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+                        mimeType = 'audio/wav';
+                    } else {
+                        mimeType = ''; // Let browser choose
+                    }
+                }
+                
+                console.log(`Using MIME type: ${mimeType}`);
+                mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+                
+                let isRecording = false;
+                let audioChunks = [];
 
                 mediaRecorder.addEventListener('dataavailable', event => {
-                    if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                        ws.send(event.data);
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
                     }
                 });
                 
-                // Send audio in chunks every 250ms
-                setInterval(() => {
-                    if (mediaRecorder.state === 'recording') {
-                        mediaRecorder.requestData();
+                mediaRecorder.addEventListener('stop', () => {
+                    if (audioChunks.length > 0 && ws.readyState === WebSocket.OPEN) {
+                        const audioBlob = new Blob(audioChunks, { type: mimeType });
+                        ws.send(audioBlob);
+                        audioChunks = [];
                     }
-                }, 250);
+                });
 
-                mediaRecorder.start();
+                // Record in 3-second chunks for better iPhone compatibility
+                const recordChunk = () => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        if (!isRecording) {
+                            audioChunks = [];
+                            mediaRecorder.start();
+                            isRecording = true;
+                            setTimeout(() => {
+                                if (isRecording && mediaRecorder.state === 'recording') {
+                                    mediaRecorder.stop();
+                                    isRecording = false;
+                                    // Start next chunk after small delay
+                                    setTimeout(recordChunk, 100);
+                                }
+                            }, 3000);
+                        }
+                    }
+                };
+                
+                recordChunk();
             };
 
             ws.onmessage = (event) => {
