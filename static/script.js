@@ -70,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (data.type === 'session_code') {
                     sessionCode = data.code;
                     updateMessengerLinks();
+                } else if (data.type === 'status') {
+                    updateStatus(data.status);
                 }
             };
 
@@ -114,5 +116,31 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappLink.href = `https://wa.me/${AUM_WHATSAPP_NUMBER}?text=${message}`;
         // Add your Telegram username or group link
         telegramLink.href = `https://t.me/your_telegram_username?text=${message}`; 
+    };
+
+    const updateStatus = (status) => {
+        const soundWave = document.querySelector('.sound-wave');
+        const statusIndicator = document.getElementById('status-indicator');
+        
+        // Remove all status classes
+        soundWave.classList.remove('listening', 'processing', 'speaking');
+        
+        // Add current status class
+        soundWave.classList.add(status);
+        
+        // Update status text
+        if (statusIndicator) {
+            switch(status) {
+                case 'listening':
+                    statusIndicator.textContent = '🎤 Listening...';
+                    break;
+                case 'processing':
+                    statusIndicator.textContent = '⏳ Processing...';
+                    break;
+                case 'speaking':
+                    statusIndicator.textContent = '🗣️ Speaking...';
+                    break;
+            }
+        }
     };
 }); 

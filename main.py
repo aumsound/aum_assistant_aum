@@ -83,8 +83,12 @@ async def websocket_endpoint(websocket: WebSocket):
     
     conversation_history = [{"role": "system", "content": PROMPT_SYSTEM_MESSAGE.replace("[PASS_CODE]", session_code)}]
 
-    # --- Initial Greeting ---
-    initial_greeting_text = "Hello. To generate your personal pass for AUM, I just need to ask a couple of questions. Are you ready?"
+    # --- Initial Greeting from AI ---
+    ai_response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=conversation_history + [{"role": "user", "content": "Hi"}]
+    )
+    initial_greeting_text = ai_response.choices[0].message.content
     conversation_history.append({"role": "assistant", "content": initial_greeting_text})
     
     response = client.audio.speech.create(
@@ -92,12 +96,16 @@ async def websocket_endpoint(websocket: WebSocket):
     )
     audio_base64 = base64.b64encode(response.content).decode('utf-8')
     await websocket.send_json({"type": "audio", "data": audio_base64})
+    await websocket.send_json({"type": "status", "status": "listening"})
 
     try:
         while True:
             # This is a simplified turn-based implementation
             # It waits for a complete audio message from the user
             data = await websocket.receive_bytes()
+            
+            # Indicate processing started
+            await websocket.send_json({"type": "status", "status": "processing"})
             
             # 1. Transcribe User's Audio
             transcript_path = "temp_transcript.webm"
@@ -123,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket):
             print(f"AI said: {ai_text}")
 
             # 3. Convert AI Response to Speech
+            await websocket.send_json({"type": "status", "status": "speaking"})
             response_audio = client.audio.speech.create(
                 model="tts-1", voice=AI_VOICE, input=ai_text
             )
@@ -130,6 +139,7 @@ async def websocket_endpoint(websocket: WebSocket):
             
             # 4. Send Audio Response to Client
             await websocket.send_json({"type": "audio", "data": audio_base64})
+            await websocket.send_json({"type": "status", "status": "listening"})
             
             # 5. Save conversation log
             asyncio.create_task(save_conversation(session_code, conversation_history))
