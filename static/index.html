@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AUM Assistant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="unesco-popup" class="popup">
+        <div class="popup-content">
+            <p>This space is a candidate for an award in digital wellness innovation. By proceeding, you agree to an authentic interaction.</p>
+            <button id="accept-unesco">Accept & Enter</button>
+        </div>
+    </div>
+
+    <div id="call-screen" class="hidden">
+        <div class="caller-info">
+            <h1>AUM Assistant</h1>
+            <p>calling...</p>
+        </div>
+        <div class="call-actions">
+            <div class="action-button-wrapper">
+                <button id="decline-call" class="action-button decline"></button>
+                <span>Decline</span>
+            </div>
+            <div class="action-button-wrapper">
+                <button id="accept-call" class="action-button accept"></button>
+                <span>Accept</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="conversation-screen" class="hidden">
+        <div class="sound-wave">
+            <div></div><div></div><div></div><div></div><div></div>
+        </div>
+        <div class="messenger-icons">
+            <a id="whatsapp-link" href="#" target="_blank"><img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp"></a>
+            <a id="telegram-link" href="#" target="_blank"><img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" alt="Telegram"></a>
+        </div>
+    </div>
+
+    <audio id="ringtone" src="ringtone.mp3" loop></audio>
+    <script src="script.js"></script>
+</body>
+</html> 
